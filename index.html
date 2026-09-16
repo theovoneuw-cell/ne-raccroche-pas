@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Ne raccroche pas</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Jeu d'horreur narratif : l'écran est la maison, ton téléphone est la lampe torche. Ne raccroche pas.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23000'/%3E%3Ccircle cx='16' cy='16' r='7' fill='%23f3e2b8'/%3E%3C/svg%3E">
+<style>
+:root{--bg:#000;--fg:#d9d2c2;--dim:#6f6a5f;--accent:#f3e2b8;--red:#b3261e;--green:#2e8b57}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--fg);font-family:"Cormorant Garamond",Georgia,"Times New Roman",serif;overflow:hidden;user-select:none;-webkit-user-select:none}
+canvas#gl{position:fixed;inset:0;width:100%;height:100%;display:block}
+canvas#grain{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;mix-blend-mode:overlay;opacity:.55}
+#vignette{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 45%,rgba(0,0,0,.55) 80%,rgba(0,0,0,.95) 100%)}
+#ui{position:fixed;inset:0;pointer-events:none}
+#sub{position:absolute;left:8vw;right:8vw;bottom:9vh;text-align:center;font-size:clamp(20px,2.6vw,38px);line-height:1.3;text-shadow:0 2px 12px #000,0 0 2px #000;opacity:0;transition:opacity .25s}
+#sub.show{opacity:1}
+#sub .who{display:block;font-size:.55em;letter-spacing:.25em;text-transform:uppercase;color:var(--dim);margin-bottom:.3em}
+#sub.s-maelle .who{color:#9fc4d8}#sub.s-maelle2 .who{color:#9fc4d8;text-shadow:0 0 8px #b3261e}#sub.s-lou .who{color:var(--accent)}#sub.s-thing .who{color:#8a2e2e}
+#hint{position:absolute;left:0;right:0;top:8vh;text-align:center;font-size:clamp(14px,1.5vw,22px);letter-spacing:.3em;text-transform:uppercase;color:var(--dim);opacity:0;transition:opacity .4s}
+#hint.show{opacity:1}
+#prompt{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:14px;height:14px;border:1.5px solid var(--accent);border-radius:50%;opacity:0;transition:opacity .3s;box-shadow:0 0 18px rgba(243,226,184,.5)}
+#prompt.show{opacity:.9;animation:pulse 1.1s ease-in-out infinite}
+@keyframes pulse{0%,100%{transform:translate(-50%,-50%) scale(1)}50%{transform:translate(-50%,-50%) scale(1.5)}}
+#chapter{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.2em;opacity:0;transition:opacity 1.2s;background:#000}
+#chapter.show{opacity:1}
+#chapter .n{font-size:clamp(12px,1.2vw,18px);letter-spacing:.5em;text-transform:uppercase;color:var(--dim)}
+#chapter .t{font-size:clamp(34px,6vw,96px);font-weight:400;letter-spacing:.06em;color:var(--fg)}
+#chapter .txt{max-width:40em;text-align:center;font-size:clamp(18px,2vw,30px);line-height:1.5;color:#a9a294;font-style:italic;padding:0 6vw}
+#title{position:absolute;inset:0;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2.2vh;pointer-events:auto;transition:opacity 1.5s}
+#title.hide{opacity:0;pointer-events:none}
+#title h1{font-size:clamp(40px,8vw,130px);font-weight:400;letter-spacing:.12em;text-transform:uppercase;color:var(--fg);text-shadow:0 0 40px rgba(243,226,184,.15)}
+#title h1 em{font-style:normal;color:var(--red)}
+#title p{color:var(--dim);font-size:clamp(15px,1.6vw,24px);letter-spacing:.15em;text-align:center;max-width:36em;line-height:1.5;padding:0 6vw}
+#qr{background:#fff;padding:14px;border-radius:6px;display:none}
+#qr.show{display:block}
+#code{font-family:ui-monospace,Menlo,monospace;font-size:clamp(18px,2.2vw,32px);letter-spacing:.4em;color:var(--accent)}
+#status{color:var(--dim);font-size:clamp(13px,1.3vw,18px);letter-spacing:.2em;text-transform:uppercase;min-height:1.6em}
+#solo{position:absolute;bottom:3vh;right:3vw;color:#3d3a34;font-size:13px;letter-spacing:.2em;text-transform:uppercase;pointer-events:auto;cursor:pointer;background:none;border:none;font-family:inherit}
+#solo:hover{color:var(--dim)}
+#over{position:absolute;inset:0;background:#000;display:none;align-items:center;justify-content:center;flex-direction:column;gap:1em}
+#over.show{display:flex}
+#over .t{font-size:clamp(28px,5vw,80px);letter-spacing:.2em;text-transform:uppercase;color:#7a1f1a}
+#over .s{color:var(--dim);letter-spacing:.3em;text-transform:uppercase;font-size:clamp(12px,1.3vw,18px)}
+#static{position:fixed;inset:0;display:none;pointer-events:none;z-index:5}
+#static.show{display:block}
+#flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:6}
+#disc{position:fixed;left:50%;top:3vh;transform:translateX(-50%);background:rgba(20,18,16,.85);border:1px solid #3a3630;color:var(--fg);padding:.6em 1.4em;letter-spacing:.2em;text-transform:uppercase;font-size:14px;display:none;z-index:7}
+#disc.show{display:block}
+#log{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(420px,88vw);background:#0c0c0e;border-radius:26px;padding:26px 22px;display:none;font-family:-apple-system,"Helvetica Neue",Arial,sans-serif;color:#eee;box-shadow:0 0 0 8px #1a1a1d,0 40px 80px #000;z-index:8}
+#log.show{display:block}
+#log h3{font-size:22px;font-weight:600;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #222}
+#log .row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #1b1b1e;font-size:17px}
+#log .row small{display:block;color:#8a8a90;font-size:13px;margin-top:2px}
+#log .row .r{color:#8a8a90;font-size:14px;text-align:right}
+#log .row.x{color:#ff5b52}
+#fin{position:fixed;left:50%;bottom:8vh;transform:translateX(-50%);letter-spacing:.5em;text-transform:uppercase;color:var(--dim);font-size:clamp(14px,1.5vw,22px);display:none;z-index:8}
+#fin.show{display:block}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<canvas id="grain"></canvas>
+<div id="vignette"></div>
+<canvas id="static"></canvas>
+<div id="flash"></div>
+<div id="ui">
+  <div id="hint"></div>
+  <div id="prompt"></div>
+  <div id="sub"><span class="who"></span><span class="txt"></span></div>
+  <div id="chapter"><div class="n"></div><div class="t"></div><div class="txt"></div></div>
+  <div id="over"><div class="t">Il t'a vue.</div><div class="s">On reprend un peu avant.</div></div>
+  <div id="log"></div>
+  <div id="fin">Fin</div>
+  <div id="title">
+    <h1>Ne <em>raccroche</em> pas</h1>
+    <p>Baisse la lumière. Monte le son.<br>Scanne le code avec ton téléphone : il devient ta lampe torche.</p>
+    <div id="qr"></div>
+    <div id="code"></div>
+    <div id="status">Connexion…</div>
+    <button id="solo" title="Souris = lampe, clic = toucher, T = torche, R = répondre, E = refuser, 1/2 = choix">Jouer sans téléphone</button>
+  </div>
+</div>
+<div id="disc">Téléphone déconnecté — reconnecte-toi</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script type="importmap">{"imports":{"three":"https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js"}}</script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
