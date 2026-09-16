@@ -86,10 +86,24 @@
     // Chrome Android avale la phrase lancée juste après un cancel() : on laisse respirer.
     if (speechSynthesis.speaking || speechSynthesis.pending) { try { speechSynthesis.cancel(); } catch (_) {} setTimeout(go, 120); } else go();
   }
-  let voiceOk = null;
-  function say(id, voice, text) {
+  // Les répliques sont des fichiers audio (voix générées) ; la synthèse vocale
+  // n'est qu'un secours. Un seul élément <audio>, débloqué au premier geste.
+  const voiceEl = new Audio(); voiceEl.setAttribute('playsinline', ''); voiceEl.preload = 'auto';
+  let VOICES = {}; fetch('assets/voice/manifest.json').then(r => r.json()).then(m => { VOICES = m; }).catch(() => {});
+  let sayTimer = null;
+  function playVoice(url, onDone) {
+    let ended = false; const fin = ok => { if (!ended) { ended = true; clearTimeout(sayTimer); onDone && onDone(ok); } };
+    voiceEl.onended = () => fin(true); voiceEl.onerror = () => fin(false);
+    voiceEl.src = url; const pr = voiceEl.play();
+    if (pr && pr.catch) pr.catch(() => fin(false));
+    voiceEl.onloadedmetadata = () => { clearTimeout(sayTimer); sayTimer = setTimeout(() => fin(true), (voiceEl.duration || 6) * 1000 + 800); };
+    sayTimer = setTimeout(() => fin(true), 9000);
+  }
+  function say(id, voice, text, url) {
     $('call').querySelector('.line').textContent = text;
-    speak(text, voice, ok => { voiceOk = ok; if (!ok) $('topt').textContent = 'Voix indisponible — lis les sous-titres à l\'écran'; send({ t: 'said', id }); });
+    const done = () => send({ t: 'said', id });
+    if (url) playVoice(url, ok => { if (ok) done(); else speak(text, voice, () => done()); });
+    else speak(text, voice, () => done());
   }
 
   // ---------- interface ----------
@@ -121,7 +135,7 @@
     const st = call.querySelector('.st'), line = call.querySelector('.line');
     if (m === 'incoming') { call.querySelector('.name').textContent = from; st.textContent = 'Appel entrant…'; line.textContent = ''; call.className = 'show ring'; ringStart(); }
     else if (m === 'active') { if (from) call.querySelector('.name').textContent = from; ringStop(); call.className = 'show active'; callStart = Date.now(); clearInterval(callTimer); callTimer = setInterval(() => st.textContent = fmt(Math.floor((Date.now() - callStart) / 1000)), 1000); st.textContent = '00:00'; }
-    else { ringStop(); clearInterval(callTimer); speakSeq++; try { speechSynthesis.cancel(); } catch (_) {} st.textContent = reason || 'Appel terminé'; line.textContent = ''; call.className = 'show ended'; tone([480], .25, .2); tone([480], .25, .2, .4); setTimeout(() => { if (call.classList.contains('ended')) call.className = ''; }, 2600); }
+    else { ringStop(); clearInterval(callTimer); speakSeq++; try { speechSynthesis.cancel(); voiceEl.pause(); } catch (_) {} st.textContent = reason || 'Appel terminé'; line.textContent = ''; call.className = 'show ended'; tone([480], .25, .2); tone([480], .25, .2, .4); setTimeout(() => { if (call.classList.contains('ended')) call.className = ''; }, 2600); }
   }
   $('ans').addEventListener('pointerdown', e => { e.stopPropagation(); ringStop(); send({ t: 'answer' }); });
   $('decl').addEventListener('pointerdown', e => { e.stopPropagation(); ringStop(); send({ t: 'decline' }); });
@@ -148,7 +162,7 @@
   function onMsg(m) {
     switch (m.t) {
       case 'ui': if ('torch' in m) setTorch(!!m.torch); if (m.mode) setMode(m.mode, m.label); break;
-      case 'say': say(m.id, m.voice, m.text); break;
+      case 'say': say(m.id, m.voice, m.text, m.url); break;
       case 'call': showCall(m.from, m.mode, m.reason); break;
       case 'sms': showSms(m.from, m.text); break;
       case 'vib': vib(m.p); break;
@@ -186,7 +200,11 @@
     try {
       audioInit(); await enableSensors(); wakeLock();
       // Test vocal : si on n'entend rien ici, on le saura avant de commencer.
-      speak('Si tu m\'entends, touche l\'écran pour caler la visée.', 'maelle', ok => { if (!ok) $('calibnote').textContent = 'La voix ne sort pas. Vérifie le volume et le mode silencieux, puis recharge la page.'; });
+      const test = "Si tu m'entends, touche l'écran pour caler la visée.";
+      const tf = VOICES['maelle|' + test];
+      const fail = () => { $('calibnote').textContent = 'La voix ne sort pas. Vérifie le volume, puis recharge la page.'; };
+      if (tf) playVoice('assets/voice/' + tf, ok => { if (!ok) speak(test, 'maelle', ok2 => { if (!ok2) fail(); }); });
+      else speak(test, 'maelle', ok => { if (!ok) fail(); });
       if (canVib) navigator.vibrate(30);
       if (peer) { try { peer.destroy(); } catch (_) {} peer = null; }
       connect();

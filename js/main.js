@@ -16,6 +16,8 @@ renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadow
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.1;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 const world = new World(renderer);
+let VOICES = {}; fetch('assets/voice/manifest.json').then(r => r.json()).then(m => { VOICES = m; }).catch(() => {});
+const hostVoice = new Audio();
 const sfx = new Sfx();
 addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); world.resize(); });
 
@@ -117,12 +119,18 @@ const G = {
   async say(who, text, { hold = 600, sub = true } = {}) {
     if (sub) G.sub(who, text);
     const dur = 900 + text.length * 62;
-    if (who === 'lou' || input.solo && !('speechSynthesis' in window)) { await G.wait(dur); }
+    const file = VOICES[who + '|' + text]; const url = file ? new URL('assets/voice/' + file, location.href).href : null;
+    if (who === 'lou') { await G.wait(dur); }
     else if (input.solo) {
-      await G._race(new Promise(r => { const u = new SpeechSynthesisUtterance(text); u.lang = 'fr-FR'; const v = speechSynthesis.getVoices().find(v => v.lang.startsWith('fr')); if (v) u.voice = v; u.rate = who === 'thing' ? .7 : 1; u.pitch = who === 'thing' ? .1 : 1.05; u.onend = r; u.onerror = r; speechSynthesis.speak(u); setTimeout(r, dur + 2500); }));
+      await G._race(new Promise(r => {
+        const done = () => r(); setTimeout(done, dur + 2500);
+        if (url) { hostVoice.src = url; hostVoice.onended = done; hostVoice.onerror = done; hostVoice.play().catch(done); }
+        else if ('speechSynthesis' in window) { const u = new SpeechSynthesisUtterance(text); u.lang = 'fr-FR'; u.rate = who === 'thing' ? .7 : 1; u.pitch = who === 'thing' ? .1 : 1.05; u.onend = done; u.onerror = done; speechSynthesis.speak(u); }
+        else done();
+      }));
     } else {
       const id = Math.random().toString(36).slice(2);
-      send({ t: 'say', id, voice: who, text });
+      send({ t: 'say', id, voice: who, text, url });
       await G._race(new Promise(r => { const f = v => { if (v === id) r(); else listeners.said.push(f); }; listeners.said.push(f); setTimeout(r, dur + 2500); }));
     }
     await G.wait(hold); if (sub) G.subClear();
