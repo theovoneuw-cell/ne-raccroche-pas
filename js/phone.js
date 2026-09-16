@@ -66,17 +66,30 @@
     if (kind === 'thing' || kind === 'maman') return male || fem || pool[0];
     return fem || pool[0];
   }
+  let speakSeq = 0;
+  function speak(text, voice, onDone) {
+    if (!('speechSynthesis' in window)) { onDone && onDone(false); return; }
+    const seq = ++speakSeq;
+    const go = () => {
+      if (seq !== speakSeq) return;
+      const u = new SpeechSynthesisUtterance(text); u.lang = 'fr-FR'; const v = pickVoice(voice); if (v) u.voice = v;
+      const P = { maelle: [1.02, 1.05], maelle2: [.95, .88], thing: [.62, .1], maman: [.8, .5] }[voice] || [1, 1];
+      u.rate = P[0]; u.pitch = P[1]; u.volume = 1;
+      let ended = false, started = false;
+      const fin = ok => { if (!ended) { ended = true; onDone && onDone(ok); } };
+      u.onstart = () => { started = true; };
+      u.onend = () => fin(true); u.onerror = () => fin(false);
+      setTimeout(() => { if (!started) fin(false); }, 2500);
+      setTimeout(() => fin(started), 1500 + text.length * 90);
+      speechSynthesis.speak(u);
+    };
+    // Chrome Android avale la phrase lancée juste après un cancel() : on laisse respirer.
+    if (speechSynthesis.speaking || speechSynthesis.pending) { try { speechSynthesis.cancel(); } catch (_) {} setTimeout(go, 120); } else go();
+  }
+  let voiceOk = null;
   function say(id, voice, text) {
     $('call').querySelector('.line').textContent = text;
-    const done = () => send({ t: 'said', id });
-    if (!('speechSynthesis' in window)) { setTimeout(done, 800 + text.length * 60); return; }
-    try { speechSynthesis.cancel(); } catch (_) {}
-    const u = new SpeechSynthesisUtterance(text); u.lang = 'fr-FR'; const v = pickVoice(voice); if (v) u.voice = v;
-    const P = { maelle: [1.02, 1.05], maelle2: [.95, .88], thing: [.62, .1], maman: [.8, .5] }[voice] || [1, 1];
-    u.rate = P[0]; u.pitch = P[1]; u.volume = 1;
-    let ended = false; const fin = () => { if (!ended) { ended = true; done(); } };
-    u.onend = fin; u.onerror = fin; setTimeout(fin, 1500 + text.length * 90);
-    speechSynthesis.speak(u);
+    speak(text, voice, ok => { voiceOk = ok; if (!ok) $('topt').textContent = 'Voix indisponible — lis les sous-titres à l\'écran'; send({ t: 'said', id }); });
   }
 
   // ---------- interface ----------
@@ -108,7 +121,7 @@
     const st = call.querySelector('.st'), line = call.querySelector('.line');
     if (m === 'incoming') { call.querySelector('.name').textContent = from; st.textContent = 'Appel entrant…'; line.textContent = ''; call.className = 'show ring'; ringStart(); }
     else if (m === 'active') { if (from) call.querySelector('.name').textContent = from; ringStop(); call.className = 'show active'; callStart = Date.now(); clearInterval(callTimer); callTimer = setInterval(() => st.textContent = fmt(Math.floor((Date.now() - callStart) / 1000)), 1000); st.textContent = '00:00'; }
-    else { ringStop(); clearInterval(callTimer); try { speechSynthesis.cancel(); } catch (_) {} st.textContent = reason || 'Appel terminé'; line.textContent = ''; call.className = 'show ended'; tone([480], .25, .2); tone([480], .25, .2, .4); setTimeout(() => { if (call.classList.contains('ended')) call.className = ''; }, 2600); }
+    else { ringStop(); clearInterval(callTimer); speakSeq++; try { speechSynthesis.cancel(); } catch (_) {} st.textContent = reason || 'Appel terminé'; line.textContent = ''; call.className = 'show ended'; tone([480], .25, .2); tone([480], .25, .2, .4); setTimeout(() => { if (call.classList.contains('ended')) call.className = ''; }, 2600); }
   }
   $('ans').addEventListener('pointerdown', e => { e.stopPropagation(); ringStop(); send({ t: 'answer' }); });
   $('decl').addEventListener('pointerdown', e => { e.stopPropagation(); ringStop(); send({ t: 'decline' }); });
@@ -172,7 +185,8 @@
   $('go').addEventListener('click', async () => {
     try {
       audioInit(); await enableSensors(); wakeLock();
-      if ('speechSynthesis' in window) { const u = new SpeechSynthesisUtterance(''); u.lang = 'fr-FR'; speechSynthesis.speak(u); }
+      // Test vocal : si on n'entend rien ici, on le saura avant de commencer.
+      speak('Si tu m\'entends, touche l\'écran pour caler la visée.', 'maelle', ok => { if (!ok) $('calibnote').textContent = 'La voix ne sort pas. Vérifie le volume et le mode silencieux, puis recharge la page.'; });
       if (canVib) navigator.vibrate(30);
       if (peer) { try { peer.destroy(); } catch (_) {} peer = null; }
       connect();
