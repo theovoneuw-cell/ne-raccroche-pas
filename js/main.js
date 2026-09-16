@@ -1,7 +1,7 @@
 // Écran principal : rendu, entrées (téléphone ou souris), interface, et
 // exécution du scénario chapitre par chapitre.
 import * as THREE from 'three';
-import { World } from './world.js';
+import { World, loadTextures } from './world.js';
 import { Sfx } from './audio.js';
 import { Host, makeCode, phoneUrl } from './net.js';
 import { chapters } from './story.js';
@@ -15,11 +15,12 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); renderer.setSize(innerW
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.1;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-const world = new World(renderer);
+let world = null;
+const worldReady = loadTextures().catch(() => {}).then(() => { world = new World(renderer); });
 let VOICES = {}; fetch('assets/voice/manifest.json').then(r => r.json()).then(m => { VOICES = m; }).catch(() => {});
 const hostVoice = new Audio();
 const sfx = new Sfx();
-addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); world.resize(); });
+addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); world && world.resize(); });
 
 // Grain animé + neige (parasites) sur canvas 2D.
 const grain = $('grain'), gctx = grain.getContext('2d');
@@ -58,6 +59,7 @@ function onPhoneMessage(m) {
   }
 }
 function setTorch(on, tell = true) {
+  if (!world) return;
   if (world.torchOn !== on) { sfx.ctx && sfx.click(.35); }
   world.torchOn = on; if (tell) send({ t: 'ui', torch: on });
 }
@@ -88,7 +90,7 @@ function startHost() {
     },
     onPhone() {
       $('status').textContent = 'Téléphone connecté'; $('disc').classList.remove('show');
-      send({ t: 'ui', torch: world.torchOn });
+      send({ t: 'ui', torch: world ? world.torchOn : false });
       if (!started) { $('title').classList.add('hide'); startGame(); }
     },
     onMessage: onPhoneMessage,
@@ -102,7 +104,7 @@ startHost();
 // ---------- API du scénario ----------
 let started = false, dead = null, deadP = null;
 const G = {
-  world, sfx, send, input, RESTART, _choices: [], gen: 0, _timers: [],
+  get world() { return world; }, sfx, send, input, RESTART, _choices: [], gen: 0, _timers: [],
   every(fn, ms) { const id = setInterval(fn, ms); G._timers.push(id); return id; },
   clearTimers() { G._timers.forEach(clearInterval); G._timers = []; },
   get solo() { return input.solo; },
@@ -158,10 +160,12 @@ const G = {
   },
   prompt(show) { $('prompt').classList.toggle('show', show); },
   async lookAt(name, secs = 1) { await G.until(() => world.hotspots[name].lit >= secs); },
-  async lookAndTap(name, secs = .9, label = 'Avancer') {
-    await G.lookAt(name, secs); G.prompt(true); G.vibrate([40]); G.phoneUI('prompt', label);
+  // Après `patience` ms sans trouver le point, on débloque quand même (jamais de blocage).
+  async lookAndTap(name, secs = .9, label = 'Avancer', patience = 18000) {
+    await Promise.race([G.lookAt(name, secs), G.wait(patience)]); G.prompt(true); G.vibrate([40]); G.phoneUI('prompt', label);
     await G.tap(); G.prompt(false); G.phoneUI('idle');
   },
+  async turnTo(x, y, z, speed = 1.2) { await G._race(world.turnTo(new THREE.Vector3(x, y, z), speed)); input.offYaw = 0; input.offPitch = 0; send({ t: 'recal' }); },
   setCam(x, z, y, yawDeg) { world.setCamera(x, z, y, THREE.MathUtils.degToRad(yawDeg)); input.offYaw = 0; input.offPitch = 0; send({ t: 'recal' }); },
   // Marche le long d'un chemin [[x,z,y],...] à `speed` m/s ; pas et balancement.
   walk(path, speed = 1.05) {
@@ -197,6 +201,7 @@ let last = performance.now(), frame = 0;
 function loop(now) {
   requestAnimationFrame(loop);
   const dt = Math.min(.05, (now - last) / 1000); last = now;
+  if (!world) return;
   if (G._walker) G._walker(dt);
   world.update(dt, input);
   renderer.render(world.scene, world.camera);
@@ -208,7 +213,7 @@ requestAnimationFrame(loop);
 // ---------- scénario ----------
 async function startGame() {
   if (started) return; started = true;
-  await sfx.start();
+  await worldReady; await sfx.start();
   let i = 0;
   while (i < chapters.length) {
     deadP = new Promise((_, rej) => { dead = rej; }); deadP.catch(() => {});

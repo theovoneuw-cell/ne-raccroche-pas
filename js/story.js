@@ -57,6 +57,7 @@ async function ch2(G) {
   const W = G.world;
   G.setCam(-.25, -6.4, GROUND, -90); G.torch(true); W.hideEntity(); G.power(false); G.tension(.1);
   G.door('cave', 1.5, true); G.callActive('Maëlle');
+  W.hotspot('stairs', -3, -.8, -6.4, 1.2);
   await G.chapter('Deux', 'La cave', '', 3000);
   let alive = true; creaks(G, () => alive, [6000, 14000]);
   await G.say('maelle', 'Fais attention aux marches. Elles sont raides.');
@@ -76,20 +77,22 @@ async function ch2(G) {
   G.tension(.4);
   // La lampe faiblit ; en haut de l'escalier, quelqu'un.
   G.flicker(2.5); await G.wait(700);
-  W.showEntity(-2.7, -.47, -6.4); G.sfx.breath(3, .3, .4);
+  W.showEntity(-5.1, -2.585, -6.4, null, true); G.sfx.breath(3, .3, .4);
   G.hint('Regarde l\'escalier');
-  await G.until(() => W.isLit(W.entity.position.clone().setY(1.5), 20, 14) || false);
+  // Si le joueur ne trouve pas, sa tête se tourne toute seule vers l'escalier.
+  const looked = await Promise.race([G.until(() => W.isLit(W.entity.position.clone().setY(-1.3), 26, 14) || W.hotspots.stairs.lit > .3).then(() => true), G.wait(7000).then(() => false)]);
+  if (!looked) { G.sfx.creak(.6, .6); await G.turnTo(-5.1, -1.3, -6.4, .9); await G.wait(400); }
   G.hint('');
   await G.wait(900); G.vibrate([80, 60, 80, 60, 300]);
   G.flicker(1.2); await G.wait(600); W.hideEntity(); G.sfx.stinger(.35);
   await G.wait(1500);
-  await G.say('lou', 'Il y a quelqu\'un. En haut de l\'escalier.');
+  await G.say('lou', 'Il y a quelqu\'un. En bas de l\'escalier. Juste là.');
   await G.say('maelle', 'Non. Non non non. Écoute-moi. C\'est la maison, elle a deux cents ans, elle bouge.');
   await G.say('maelle', 'Remonte, et va chercher la lampe à pétrole dans la chambre de mamie. Elle est toujours sur sa table de nuit.');
   await G.say('lou', 'Je veux pas monter.');
   await G.say('maelle', 'Tu y vas et tu redescends. Je ne raccroche pas. Promis.');
   G.tension(.25);
-  W.hotspot('stairs', -3, -.8, -6.4, 1.2); G.hint('Éclaire l\'escalier, puis touche l\'écran');
+  G.hint('Éclaire l\'escalier, puis touche l\'écran');
   await G.lookAndTap('stairs', .8, 'Remonter'); G.hint('');
   await G.walk([[-5.5, -6.4, CAVE], [-3.6, -6.4, -1.4], [-1.5, -6.4, GROUND], [-.25, -6.4, GROUND]], .8);
   alive = false;

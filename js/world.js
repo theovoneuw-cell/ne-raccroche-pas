@@ -3,6 +3,30 @@
 import * as THREE from 'three';
 
 const EYE = 1.6;
+const PBR = {};
+const LOADER = new THREE.TextureLoader();
+function loadTex(url, srgb) {
+  return new Promise(res => LOADER.load(url, t => { t.wrapS = t.wrapT = THREE.RepeatWrapping; if (srgb) t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; res(t); }, undefined, () => res(null)));
+}
+// Textures photo (CC0, voir assets/tex/LICENCES.md). Si un jeu manque, on
+// retombe sur la texture dessinée à la volée.
+export async function loadTextures() {
+  const names = ['wallpaper', 'planks', 'parquet', 'plaster', 'concrete', 'wood', 'fabric', 'ceiling'];
+  await Promise.all(names.map(async n => {
+    const [map, normalMap, roughnessMap] = await Promise.all([loadTex(`assets/tex/${n}/diff.jpg`, true), loadTex(`assets/tex/${n}/nor.jpg`), loadTex(`assets/tex/${n}/rough.jpg`)]);
+    if (map) PBR[n] = { map, normalMap, roughnessMap };
+  }));
+}
+function withRepeat(mat, rx, ry) {
+  const m = mat.clone();
+  for (const k of ['map', 'normalMap', 'roughnessMap']) if (m[k]) { m[k] = m[k].clone(); m[k].repeat.set(rx, ry); m[k].needsUpdate = true; }
+  return m;
+}
+function pbr(name, fallbackMap, { color = 0xffffff, roughness = 1, normal = 1, metalness = 0 } = {}) {
+  const t = PBR[name];
+  if (!t) return new THREE.MeshStandardMaterial({ map: fallbackMap, color, roughness, metalness });
+  return new THREE.MeshStandardMaterial({ map: t.map, normalMap: t.normalMap || null, normalScale: new THREE.Vector2(normal, normal), roughnessMap: t.roughnessMap || null, color, roughness, metalness });
+}
 export const GROUND = 0, CAVE = -2.8, UP = 2.9;
 
 // ---------- textures procédurales ----------
@@ -48,19 +72,20 @@ function textures() {
 // ---------- matériaux ----------
 const MAT = {};
 function materials() {
-  MAT.wall = new THREE.MeshStandardMaterial({ map: TEX.wallpaper, roughness: .95 });
-  MAT.plaster = new THREE.MeshStandardMaterial({ map: TEX.plaster, roughness: .95 });
-  MAT.floor = new THREE.MeshStandardMaterial({ map: TEX.floor, roughness: .7, metalness: .05 });
-  MAT.concrete = new THREE.MeshStandardMaterial({ map: TEX.concrete, roughness: 1 });
-  MAT.ceiling = new THREE.MeshStandardMaterial({ map: TEX.ceiling, roughness: 1 });
-  MAT.wood = new THREE.MeshStandardMaterial({ map: TEX.wood, roughness: .6 });
-  MAT.fabric = new THREE.MeshStandardMaterial({ map: TEX.fabric, roughness: 1 });
+  MAT.wall = pbr('wallpaper', TEX.wallpaper, { color: 0xd9d2c6, normal: .9 });
+  MAT.plaster = pbr('plaster', TEX.plaster, { color: 0xa9a49a, normal: 1.2 });
+  MAT.floor = pbr('planks', TEX.floor, { color: 0xc9bfae, normal: 1.1 });
+  MAT.parquet = pbr('parquet', TEX.floor, { color: 0x9c8a70, normal: .8 });
+  MAT.concrete = pbr('concrete', TEX.concrete, { color: 0x6e6b64, normal: 1 });
+  MAT.ceiling = pbr('ceiling', TEX.ceiling, { color: 0x7d786e, normal: .7 });
+  MAT.wood = pbr('wood', TEX.wood, { color: 0xb59f8a, roughness: .9, normal: .7 });
+  MAT.fabric = pbr('fabric', TEX.fabric, { color: 0x6e6a5c, normal: .8 });
   MAT.metal = new THREE.MeshStandardMaterial({ color: 0x55585c, roughness: .4, metalness: .8 });
   MAT.glass = new THREE.MeshStandardMaterial({ color: 0x0a0c10, roughness: .05, metalness: .9, transparent: true, opacity: .55 });
   MAT.black = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 1 });
-  MAT.frame = new THREE.MeshStandardMaterial({ color: 0x2a2018, roughness: .8 });
+  MAT.frame = pbr('wood', TEX.wood, { color: 0x55483c, roughness: .9, normal: .5 });
   MAT.portrait = new THREE.MeshStandardMaterial({ map: TEX.portrait, roughness: .9 });
-  MAT.sheet = new THREE.MeshStandardMaterial({ color: 0x8d8778, roughness: 1 });
+  MAT.sheet = pbr('fabric', TEX.fabric, { color: 0xb8b2a2, normal: .6 });
 }
 
 export class World {
@@ -90,13 +115,12 @@ export class World {
   wall(x1, z1, x2, z2, y0, h, mat = MAT.wall, th = .16) {
     const dx = x2 - x1, dz = z2 - z1, len = Math.hypot(dx, dz);
     const m = this.box(len, h, th, mat, (x1 + x2) / 2, y0 + h / 2, (z1 + z2) / 2, -Math.atan2(dz, dx), false);
-    if (mat.map) { m.material = mat.clone(); m.material.map = mat.map.clone(); m.material.map.repeat.set(len / 2, h / 2.7); m.material.map.needsUpdate = true; }
+    if (mat.map) m.material = withRepeat(mat, len / 2.2, h / 2.2);
     return m;
   }
   slab(x1, z1, x2, z2, y, mat, up = true) {
     const w = Math.abs(x2 - x1), d = Math.abs(z2 - z1);
-    const g = new THREE.PlaneGeometry(w, d); const m = new THREE.Mesh(g, mat.clone());
-    m.material.map = mat.map.clone(); m.material.map.repeat.set(w / 2, d / 2); m.material.map.needsUpdate = true;
+    const g = new THREE.PlaneGeometry(w, d); const m = new THREE.Mesh(g, withRepeat(mat, w / 2, d / 2));
     m.rotation.x = up ? -Math.PI / 2 : Math.PI / 2; m.position.set((x1 + x2) / 2, y, (z1 + z2) / 2); m.receiveShadow = true; this.scene.add(m); return m;
   }
   room(x1, z1, x2, z2, y, h, floorMat = MAT.floor, ceilMat = MAT.ceiling) {
@@ -141,7 +165,7 @@ export class World {
     const H = 2.7, Y = GROUND;
     // Rez-de-chaussée : hall, salon, couloir, cuisine.
     this.room(-2, 0, 2, 4, Y, H);
-    this.room(-8, -1, -2, 4, Y, H);
+    this.room(-8, -1, -2, 4, Y, H, MAT.parquet);
     this.room(-1, -8, 1, 0, Y, H);
     this.room(1, -6, 6, -1, Y, H);
     // Hall
@@ -239,25 +263,33 @@ export class World {
   // ----- la chose -----
   buildEntity() {
     const g = new THREE.Group();
-    const m = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 1 });
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(.2, 1.6, 4, 10), m); body.position.y = 1.2; body.scale.set(.85, 1, .7); body.castShadow = true; g.add(body);
-    const head = new THREE.Mesh(new THREE.SphereGeometry(.14, 12, 10), m); head.position.y = 2.2; head.scale.set(.85, 1.25, .9); head.rotation.z = .25; head.castShadow = true; g.add(head);
-    const arm = new THREE.Mesh(new THREE.CapsuleGeometry(.045, 1.1, 3, 6), m); arm.position.set(-.28, 1.25, 0); arm.rotation.z = .08; g.add(arm);
-    const arm2 = arm.clone(); arm2.position.x = .28; arm2.rotation.z = -.08; g.add(arm2);
+    const m = new THREE.MeshStandardMaterial({ color: 0x0e0d0c, roughness: .92, metalness: 0 });
+    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(.17, 1.2, 4, 12), m); torso.position.y = 1.35; torso.scale.set(.9, 1, .6); torso.rotation.x = .18; torso.castShadow = true; g.add(torso);
+    const hips = new THREE.Mesh(new THREE.CapsuleGeometry(.14, .3, 4, 10), m); hips.position.y = .7; hips.scale.set(1.1, 1, .7); g.add(hips);
+    for (const sx of [-1, 1]) {
+      const leg = new THREE.Mesh(new THREE.CapsuleGeometry(.055, .95, 3, 8), m); leg.position.set(sx * .11, .5, 0); leg.castShadow = true; g.add(leg);
+      const arm = new THREE.Mesh(new THREE.CapsuleGeometry(.04, 1.35, 3, 8), m); arm.position.set(sx * .27, 1.15, .05); arm.rotation.z = sx * .06; arm.rotation.x = -.1; g.add(arm);
+      const hand = new THREE.Mesh(new THREE.CapsuleGeometry(.03, .22, 3, 6), m); hand.position.set(sx * .29, .4, .08); hand.rotation.x = .5; g.add(hand);
+    }
+    const neck = new THREE.Mesh(new THREE.CapsuleGeometry(.045, .2, 3, 8), m); neck.position.y = 2.1; g.add(neck);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(.13, 14, 12), m); head.position.y = 2.3; head.scale.set(.8, 1.35, .95); head.rotation.z = .35; head.rotation.x = .15; head.castShadow = true; g.add(head);
     const em = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xd8d0c0, emissiveIntensity: .35, roughness: .2 });
-    const e1 = new THREE.Mesh(new THREE.SphereGeometry(.018, 8, 6), em); e1.position.set(-.05, 2.24, .12); g.add(e1);
-    const e2 = e1.clone(); e2.position.x = .05; g.add(e2);
-    g.visible = false; g.userData.eyes = em; this.scene.add(g); this.entity = g;
+    const e1 = new THREE.Mesh(new THREE.SphereGeometry(.014, 8, 6), em); e1.position.set(-.045, 2.33, .11); g.add(e1);
+    const e2 = e1.clone(); e2.position.x = .045; g.add(e2);
+    g.scale.set(1, 1.08, 1);
+    g.visible = false; g.userData.eyes = em; g.userData.head = head; g.userData.torso = torso; this.scene.add(g); this.entity = g;
     this.entityState = { visible: false, chasing: false, speed: .9, target: null };
   }
-  showEntity(x, y, z, faceTo = null) {
+  showEntity(x, y, z, faceTo = null, crouch = false) {
     this.entity.position.set(x, y, z); this.entity.visible = true; this.entityState.visible = true;
+    this.entity.scale.set(1, crouch ? .7 : 1.08, 1); this.entity.userData.torso.rotation.x = crouch ? .6 : .18;
     if (faceTo) this.entity.lookAt(faceTo.x, y + 1.2, faceTo.z); else this.entity.lookAt(this.camera.position.x, y + 1.2, this.camera.position.z);
   }
   hideEntity() { this.entity.visible = false; this.entityState.visible = false; this.entityState.chasing = false; this.entityState.floorY = null; }
   entityDist() { return this.entity.position.distanceTo(new THREE.Vector3(this.camera.position.x, this.entity.position.y, this.camera.position.z)); }
 
   // ----- vue -----
+  turnTo(p, speed = 1.2) { return new Promise(done => { this.turn = { p: p.clone(), speed, done }; }); }
   setCamera(x, z, floorY, yaw) {
     this.camera.position.set(x, floorY + EYE, z); this.camYaw = yaw; this.camPitch = 0; this.beamYaw = yaw; this.beamPitch = 0; this.floorY = floorY;
   }
@@ -274,20 +306,34 @@ export class World {
 
   update(dt, input) {
     this.t += dt;
+    const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
     // Le téléphone donne un décalage (offYaw/offPitch) par rapport au calage.
     // La lampe se déplace dans le champ de vision ; au-delà de 22°, la vue
     // pivote comme avec un joystick, et la lampe reste au bord.
     const sway = Math.sin(this.t * 1.7) * .006 + Math.sin(this.t * 4.3) * .003;
-    const off = input.offYaw, dz = THREE.MathUtils.degToRad(22), maxRel = THREE.MathUtils.degToRad(32);
+    let off = input.offYaw, offP = input.offPitch;
+    if (this.turn) {   // la vue se tourne toute seule vers un point ; le téléphone est ignoré
+      const T = this.turn, to = T.p.clone().sub(this.camera.position);
+      const ty = Math.atan2(to.x, -to.z), tp = Math.atan2(to.y, Math.hypot(to.x, to.z));
+      const k = Math.min(1, dt * T.speed);
+      this.camYaw += wrap(ty - this.camYaw) * k; this.camPitch += (tp - this.camPitch) * k;
+      off = 0; offP = tp;
+      if (Math.abs(wrap(ty - this.camYaw)) < .02 && Math.abs(tp - this.camPitch) < .02) { this.turn = null; this.pitchBias = tp; T.done(); }
+    }
+    const dz = THREE.MathUtils.degToRad(22), maxRel = THREE.MathUtils.degToRad(32);
     if (Math.abs(off) > dz) {
       const over = Math.abs(off) - dz;
       const rate = Math.min(THREE.MathUtils.degToRad(130), over / THREE.MathUtils.degToRad(18) * THREE.MathUtils.degToRad(90));
       this.camYaw += Math.sign(off) * rate * dt;
     }
     this.beamYaw = this.camYaw + THREE.MathUtils.clamp(off, -maxRel, maxRel);
-    this.beamPitch = THREE.MathUtils.clamp(input.offPitch, -1.1, .8);
-    const pt = THREE.MathUtils.clamp(this.beamPitch * .55, -.45, .4);
-    this.camPitch += (pt - this.camPitch) * Math.min(1, dt * 4);
+    const bias = this.turn ? 0 : (this.pitchBias || 0);
+    this.beamPitch = THREE.MathUtils.clamp(offP + bias, -1.1, .8);
+    if (!this.turn) {
+      // Après une rotation forcée, la tête reste levée tant que le joueur ne bouge pas le téléphone.
+      if (Math.abs(input.offPitch) > .12 || Math.abs(input.offYaw) > .2) this.pitchBias = (this.pitchBias || 0) * Math.max(0, 1 - dt * 1.5);
+      const pt = THREE.MathUtils.clamp(input.offPitch * .55 + (this.pitchBias || 0), -.5, .5); this.camPitch += (pt - this.camPitch) * Math.min(1, dt * 4);
+    }
     this.camera.rotation.set(0, 0, 0); this.camera.rotation.order = 'YXZ';
     this.camera.rotation.y = -this.camYaw + sway * 2; this.camera.rotation.x = this.camPitch + sway;
     // Torche
@@ -308,14 +354,14 @@ export class World {
     // Portes
     for (const d of Object.values(this.doors)) { const u = d.userData; u.open += (u.target - u.open) * Math.min(1, dt * 2.2); u.panel.rotation.y = -u.open; }
     // Hotspots : temps d'éclairage cumulé
-    for (const h of Object.values(this.hotspots)) { if (this.isLit(h.p, 13, 8)) h.lit += dt; else h.lit = Math.max(0, h.lit - dt * 2); }
+    for (const h of Object.values(this.hotspots)) { if (this.isLit(h.p, 18, 12)) h.lit += dt; else h.lit = Math.max(0, h.lit - dt * 2); }
     // La chose
     const E = this.entityState;
     if (this.entity.visible) {
       const lit = this.isLit(this.entity.position.clone().setY(this.entity.position.y + 1.6), 15, 14);
       this.entity.userData.eyes.emissiveIntensity = lit ? 2.5 : .35 + Math.sin(this.t * 3) * .1;
       E.lit = lit; E.litTime = lit ? (E.litTime || 0) + dt : 0; E.darkTime = lit ? 0 : (E.darkTime || 0) + dt;
-      this.entity.position.y += Math.sin(this.t * 2.1) * .0015;
+      const u = this.entity.userData; u.torso.rotation.x += Math.sin(this.t * 1.3) * .002; u.head.rotation.z = .35 + Math.sin(this.t * .7) * .12 + (Math.random() < .004 ? .5 : 0);
       if (E.chasing) {
         const to = new THREE.Vector3(this.camera.position.x, this.entity.position.y, this.camera.position.z).sub(this.entity.position);
         const d = to.length(); to.normalize();

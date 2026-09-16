@@ -107,6 +107,8 @@
   }
 
   // ---------- interface ----------
+  function clock() { const d = new Date(); $('idle').querySelector('.h').textContent = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }); $('idle').querySelector('.d').textContent = d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }); }
+  clock(); setInterval(clock, 15000);
   const torchEl = $('torch'), msg = $('msg'), call = $('call');
   let torch = false, mode = 'idle';
   function setTorch(on) { torch = on; torchEl.classList.toggle('on', on); $('torchl').textContent = on ? 'Allumée' : 'Lampe'; }
@@ -133,8 +135,8 @@
   function fmt(s) { return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); }
   function showCall(from, m, reason) {
     const st = call.querySelector('.st'), line = call.querySelector('.line');
-    if (m === 'incoming') { call.querySelector('.name').textContent = from; st.textContent = 'Appel entrant…'; line.textContent = ''; call.className = 'show ring'; ringStart(); }
-    else if (m === 'active') { if (from) call.querySelector('.name').textContent = from; ringStop(); call.className = 'show active'; callStart = Date.now(); clearInterval(callTimer); callTimer = setInterval(() => st.textContent = fmt(Math.floor((Date.now() - callStart) / 1000)), 1000); st.textContent = '00:00'; }
+    if (m === 'incoming') { call.querySelector('.name').textContent = from; call.querySelector('.av').textContent = (from || '?')[0]; st.textContent = 'Appel entrant…'; line.textContent = ''; call.className = 'show ring'; ringStart(); }
+    else if (m === 'active') { if (from) { call.querySelector('.name').textContent = from; call.querySelector('.av').textContent = from[0]; } ringStop(); call.className = 'show active'; callStart = Date.now(); clearInterval(callTimer); callTimer = setInterval(() => st.textContent = fmt(Math.floor((Date.now() - callStart) / 1000)), 1000); st.textContent = '00:00'; }
     else { ringStop(); clearInterval(callTimer); speakSeq++; try { speechSynthesis.cancel(); voiceEl.pause(); } catch (_) {} st.textContent = reason || 'Appel terminé'; line.textContent = ''; call.className = 'show ended'; tone([480], .25, .2); tone([480], .25, .2, .4); setTimeout(() => { if (call.classList.contains('ended')) call.className = ''; }, 2600); }
   }
   $('ans').addEventListener('pointerdown', e => { e.stopPropagation(); ringStop(); send({ t: 'answer' }); });
@@ -188,7 +190,7 @@
   function dial() {
     if (conn && conn.open) return;
     const c = peer.connect('nrp-' + code, { reliable: true });
-    c.on('open', () => { conn = c; $('disc').classList.remove('show'); $('dot').classList.add('on'); send({ t: 'hello', vib: canVib, ios: isIOS }); if (calibrated) send({ t: 'ready' }); });
+    c.on('open', () => { conn = c; $('disc').classList.remove('show'); $('dot').classList.add('on'); $('calibconn').textContent = 'Connecté à l\'écran'; send({ t: 'hello', vib: canVib, ios: isIOS }); if (calibrated) send({ t: 'ready' }); });
     c.on('data', onMsg);
     const lost = () => { if (conn === c) conn = null; $('dot').classList.remove('on'); $('disc').classList.add('show'); schedule(); };
     c.on('close', lost); c.on('error', lost);

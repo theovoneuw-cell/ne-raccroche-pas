@@ -5,15 +5,20 @@
 <title>Ne raccroche pas — téléphone</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#000000">
 <style>
 :root{--bg:#000;--fg:#eee;--dim:#8a8a90;--green:#34c759;--red:#ff3b30;--accent:#f3e2b8}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Roboto,Arial,sans-serif;overflow:hidden;user-select:none;-webkit-user-select:none;touch-action:none}
+html,body{height:100%;background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Roboto,Arial,sans-serif;overflow:hidden;user-select:none;-webkit-user-select:none;touch-action:none;overscroll-behavior:none}
 body{position:fixed;inset:0}
 .screen{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;padding:max(24px,env(safe-area-inset-top)) 24px max(24px,env(safe-area-inset-bottom));text-align:center}
 .screen.show{display:flex}
-h1{font-family:Georgia,"Times New Roman",serif;font-weight:400;letter-spacing:.14em;text-transform:uppercase;font-size:22px;color:#cfc8b8}
+h1{font-family:Georgia,"Times New Roman",serif;font-weight:400;letter-spacing:.16em;text-transform:uppercase;font-size:26px;color:#cfc8b8;line-height:1.3}
+#setup{background:radial-gradient(ellipse at 50% 30%,#141210 0%,#000 70%)}
+#setup .ico{width:74px;height:74px;border-radius:50%;border:1.5px solid #3a3630;display:flex;align-items:center;justify-content:center;font-size:34px;margin-bottom:26px;box-shadow:0 0 50px rgba(243,226,184,.12)}
+#setup ol{text-align:left;color:var(--dim);font-size:15px;line-height:1.6;margin:22px 0 0;padding-left:1.3em;max-width:22em}
+#setup ol b{color:#cfc8b8;font-weight:500}
 h1 em{font-style:normal;color:#b3261e}
 p{color:var(--dim);line-height:1.5;font-size:16px;max-width:30em}
 .btn{appearance:none;border:none;font:inherit;color:#000;background:var(--accent);border-radius:999px;padding:18px 34px;font-size:18px;font-weight:600;margin-top:28px}
@@ -25,12 +30,17 @@ p{color:var(--dim);line-height:1.5;font-size:16px;max-width:30em}
 #top .dot{width:8px;height:8px;border-radius:50%;background:#444;margin-right:10px}
 #top .dot.on{background:var(--green)}
 #mid{flex:1;width:100%;display:flex;align-items:center;justify-content:center;position:relative}
+#idle{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#bdb8ad}
+#idle .h{font-size:76px;font-weight:200;letter-spacing:-.02em;line-height:1}
+#idle .d{font-size:16px;color:var(--dim);letter-spacing:.06em}
+#idle .n{margin-top:26px;font-size:13px;letter-spacing:.3em;text-transform:uppercase;color:#4a4740}
+#call.show~#idle,#choice.show~#idle{display:none}
 #msg{position:absolute;left:50%;bottom:6%;transform:translateX(-50%);z-index:3;font-size:19px;color:#000;background:var(--accent);border-radius:999px;padding:14px 26px;white-space:nowrap;opacity:0;transition:opacity .3s;letter-spacing:.02em;box-shadow:0 0 40px rgba(243,226,184,.35)}
 #msg.show{opacity:1;animation:breathe 1.6s ease-in-out infinite}
 @keyframes breathe{0%,100%{opacity:.55}50%{opacity:1}}
 #call{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:radial-gradient(ellipse at top,#1d1d22,#000 70%)}
 #call.show{display:flex}
-#call .av{width:96px;height:96px;border-radius:50%;background:#2b2b30;display:flex;align-items:center;justify-content:center;font-size:40px;color:#bbb;margin-bottom:8px}
+#call .av{width:96px;height:96px;border-radius:50%;background:linear-gradient(160deg,#3a3a40,#1b1b1f);display:flex;align-items:center;justify-content:center;font-family:Georgia,serif;font-size:42px;color:#d8d2c4;margin-bottom:8px;box-shadow:0 10px 30px rgba(0,0,0,.6)}
 #call .name{font-size:32px;font-weight:500}
 #call .st{color:var(--dim);font-size:16px;min-height:1.4em}
 #call .line{color:#cfcfd4;font-size:15px;max-width:26em;line-height:1.45;min-height:3em;margin-top:8px;padding:0 12px}
@@ -43,11 +53,13 @@ p{color:var(--dim);line-height:1.5;font-size:16px;max-width:30em}
 #call.ring .av{animation:ring 1.4s ease-in-out infinite}
 @keyframes ring{0%,100%{transform:rotate(0)}10%{transform:rotate(-8deg)}20%{transform:rotate(8deg)}30%{transform:rotate(-6deg)}40%{transform:rotate(6deg)}50%{transform:rotate(0)}}
 #bottom{width:100%;display:flex;flex-direction:column;align-items:center;gap:12px;padding-bottom:8px}
-#torch{width:110px;height:110px;border-radius:50%;border:2px solid #333;background:#0d0d0f;display:flex;align-items:center;justify-content:center;font-size:44px;transition:background .2s,border-color .2s,box-shadow .2s}
+#torch{width:128px;height:128px;border-radius:50%;border:2px solid #2e2c28;background:radial-gradient(circle at 50% 35%,#1a1917,#070707);display:flex;align-items:center;justify-content:center;font-size:50px;transition:background .2s,border-color .2s,box-shadow .2s}
 #torch.on{background:#f3e2b8;border-color:#fff;box-shadow:0 0 60px rgba(243,226,184,.6)}
 #torch.hl{animation:hl 1s ease-in-out infinite}
 @keyframes hl{0%,100%{box-shadow:0 0 0 0 rgba(243,226,184,.0)}50%{box-shadow:0 0 0 14px rgba(243,226,184,.35)}}
-#torchl{color:var(--dim);font-size:13px;letter-spacing:.2em;text-transform:uppercase;min-height:1.2em}
+#torchl{color:var(--dim);font-size:13px;letter-spacing:.25em;text-transform:uppercase;min-height:1.2em}
+#torch.hl~#torchl{color:var(--accent)}
+#bottom{padding-bottom:max(10px,env(safe-area-inset-bottom))}
 #choice{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:rgba(0,0,0,.92);padding:24px;z-index:5}
 #choice.show{display:flex}
 #choice button{width:100%;max-width:360px;padding:22px;border-radius:18px;border:1px solid #444;background:#111;color:#fff;font:inherit;font-size:20px}
@@ -75,22 +87,31 @@ p{color:var(--dim);line-height:1.5;font-size:16px;max-width:30em}
 </head>
 <body>
 <div id="setup" class="screen show">
+  <div class="ico">🔦</div>
   <h1>Ne <em>raccroche</em> pas</h1>
-  <p style="margin-top:14px">Ce téléphone est ta lampe torche.<br>Mets le son à fond, et garde-le dans ta main.</p>
+  <p style="margin-top:14px">Ce téléphone est ta lampe torche.</p>
+  <ol>
+    <li><b>Volume à fond</b> — les voix sortent d'ici.</li>
+    <li><b>Garde-le en main</b>, pointé vers l'écran.</li>
+    <li>Il va <b>sonner</b>. Réponds.</li>
+  </ol>
   <button class="btn" id="go">Activer la lampe</button>
   <div id="err"></div>
 </div>
 <div id="calib" class="screen">
+  <div class="aim"><i></i></div>
   <p style="font-size:18px;color:#ddd">Tiens le téléphone comme une lampe, pointé vers l'écran.</p>
   <p style="margin-top:10px">Puis touche l'écran pour caler la visée.</p>
   <p id="calibnote" style="margin-top:22px;font-size:14px;color:#ff8a80;min-height:2.6em"></p>
+  <p id="calibconn" style="position:absolute;bottom:max(28px,env(safe-area-inset-bottom));left:0;right:0;font-size:12px;letter-spacing:.25em;text-transform:uppercase;color:var(--dim)">Connexion à l'écran…</p>
+  <style>#calib{background:radial-gradient(ellipse at 50% 40%,#141210 0%,#000 70%)}#calib .aim{width:120px;height:120px;border-radius:50%;border:1px solid #3a3630;margin-bottom:34px;position:relative;box-shadow:0 0 60px rgba(243,226,184,.1)}#calib .aim:before,#calib .aim:after{content:"";position:absolute;background:#3a3630}#calib .aim:before{left:50%;top:14px;bottom:14px;width:1px}#calib .aim:after{top:50%;left:14px;right:14px;height:1px}#calib .aim i{position:absolute;left:50%;top:50%;width:12px;height:12px;margin:-6px;border-radius:50%;background:var(--accent);box-shadow:0 0 18px rgba(243,226,184,.8);animation:breathe 1.6s ease-in-out infinite}</style>
 </div>
 <div id="game" class="screen">
   <div id="top"><span class="dot" id="dot"></span><span id="topt">Connecté</span></div>
   <div id="mid">
     <div id="msg"></div>
     <div id="call">
-      <div class="av">☏</div>
+      <div class="av">M</div>
       <div class="name"></div>
       <div class="st"></div>
       <div class="line"></div>
@@ -99,6 +120,7 @@ p{color:var(--dim);line-height:1.5;font-size:16px;max-width:30em}
         <div class="act answer"><button class="a" id="ans" aria-label="Répondre"><svg width="36" height="36" viewBox="0 0 24 24" fill="#fff"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1L6.6 10.8z"/></svg></button><span>Répondre</span></div>
       </div>
     </div>
+    <div id="idle"><div class="h">00:00</div><div class="d"></div><div class="n">Aucun appel</div></div>
   </div>
   <div id="bottom"><div id="torch">🔦</div><div id="torchl">Lampe</div></div>
 </div>
