@@ -11,17 +11,17 @@ OUT = ROOT / 'assets' / 'voice'; OUT.mkdir(parents=True, exist_ok=True)
 
 EDGE = ROOT / 'build' / 'venv' / 'bin' / 'edge-tts'
 USE_SAY = '--say' in sys.argv or not EDGE.exists()
+# Effet ligne téléphonique : bande étroite, grain de codec 8 kHz, compression,
+# légère saturation, puis un souffle de ligne mélangé en fond.
+PHONE = "highpass=f=320,lowpass=f=3300,aresample=8000,aresample=24000,acompressor=threshold=-24dB:ratio=5:attack=4:release=90:makeup=4,volume=1.6,alimiter=limit=0.85:level=false"
 VOICES = {
-  # qui : (voix edge-tts, rate, pitch, voix say, débit say, filtre ffmpeg)
-  'maelle':  ('fr-FR-DeniseNeural', '+6%', '+0Hz', 'Amélie', 178,
-              "highpass=f=280,lowpass=f=3600,acompressor=threshold=-18dB:ratio=3,volume=1.5"),
-  'maelle2': ('fr-FR-DeniseNeural', '-4%', '-6Hz', 'Amélie', 170,
-              "asetrate=24000*0.97,aresample=24000,highpass=f=280,lowpass=f=3200,aecho=0.7:0.45:38:0.22,acompressor=threshold=-18dB:ratio=3,volume=1.4"),
-  'maman':   ('fr-FR-DeniseNeural', '-28%', '-18Hz', 'Amélie', 150,
-              "asetrate=24000*0.88,aresample=24000,highpass=f=250,lowpass=f=2400,aecho=0.8:0.6:90:0.35,volume=1.3"),
-  'thing':   ('fr-FR-HenriNeural', '-32%', '-40Hz', 'Thomas', 140,
-              "asetrate=24000*0.78,aresample=24000,lowpass=f=1700,aecho=0.8:0.75:130:0.42,acompressor=threshold=-20dB:ratio=4,volume=1.7"),
+  # qui : (voix edge-tts, rate, pitch, voix say, débit say, filtre ffmpeg avant l'effet téléphone)
+  'maelle':  ('fr-FR-DeniseNeural', '+6%', '+0Hz', 'Amélie', 178, "volume=1.0"),
+  'maelle2': ('fr-FR-DeniseNeural', '-4%', '-6Hz', 'Amélie', 170, "asetrate=24000*0.97,aresample=24000,aecho=0.7:0.45:38:0.22"),
+  'maman':   ('fr-FR-DeniseNeural', '-28%', '-18Hz', 'Amélie', 150, "asetrate=24000*0.88,aresample=24000,lowpass=f=2400,aecho=0.8:0.6:90:0.35"),
+  'thing':   ('fr-FR-HenriNeural', '-32%', '-40Hz', 'Thomas', 140, "asetrate=24000*0.78,aresample=24000,lowpass=f=1700,aecho=0.8:0.75:130:0.42,acompressor=threshold=-20dB:ratio=4,volume=1.4"),
 }
+HISS = {'maelle': .006, 'maelle2': .008, 'maman': .012, 'thing': .014}
 
 def key(who, text): return hashlib.sha1(f'{who}|{text}'.encode()).hexdigest()[:10]
 
@@ -47,7 +47,8 @@ for who, text in lines:
         else:
             raw = os.path.join(td, 'v.mp3')
             subprocess.run([str(EDGE), '--voice', evoice, '--rate', erate, '--pitch', epitch, '--text', spoken, '--write-media', raw], check=True, capture_output=True)
-        subprocess.run([FFMPEG, '-y', '-loglevel', 'error', '-i', raw, '-ac', '1', '-ar', '24000', '-af', af, '-b:a', '48k', str(mp3)], check=True)
+        fc = f"[0:a]{af},{PHONE}[v];anoisesrc=c=pink:a={HISS[who]}:r=24000[n];[v][n]amix=inputs=2:duration=first:normalize=0,apad=pad_dur=0.25[out]"
+        subprocess.run([FFMPEG, '-y', '-loglevel', 'error', '-i', raw, '-filter_complex', fc, '-map', '[out]', '-ac', '1', '-ar', '24000', '-b:a', '48k', str(mp3)], check=True)
     print(f'{who:8} {k}  {text[:60]}')
 
 (OUT / 'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=0))
